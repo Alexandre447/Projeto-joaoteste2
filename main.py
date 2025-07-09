@@ -1,112 +1,82 @@
-from datetime import datetime
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from datetime import date, datetime
+import uuid
+from fastapi.responses import RedirectResponse
+
 from models.despesa import Despesa
 from models.TipoDespesa import TipoDespesa
-from services.operacoes import calcular_totais, filtrar_por_data, filtrar_por_tipo, listar_todos
 from services.persistencia import carregar_lancamentos, salvar_lancamentos
-import uuid
 
+app = FastAPI()
 
-lancamentos = carregar_lancamentos()
+# Carrega lançamentos na inicialização
+lancamentos: List[Despesa] = carregar_lancamentos()
 
-for lanc in lancamentos:
-    if not lanc.id:
-        lanc.id = str(uuid.uuid4())[:6]
+# Pydantic model para validação e serialização
+class LancamentoCreate(BaseModel):
+    descricao: str
+    valor: float
+    data: date
+    tipo: str = Field(..., pattern="^(Receita|Despesa)$")
 
-while True:
-    print("1 - Adicionar lançamento")
-    print("2 - Listar todos")
-    print("3 - Filtrar por tipo")
-    print("4 - Filtrar por data")
-    print("5 - Ver totais")
-    print("6 - Editar lançamento")
-    print("7 - Excluir lançamento")
-    print("8 - Sair")
+class Lancamento(LancamentoCreate):
+    id: str
 
-    opcao = input("Escolha uma opção: ")
+# Helper para converter Despesa para dict serializável
+def despesa_to_dict(desp: Despesa) -> dict:
+    return {
+        "id": desp.id,
+        "descricao": desp.descricao,
+        "valor": float(desp.valor),
+        "data": desp.data,
+        "tipo": desp.tipo.value
+    }
 
-    if opcao == "1":
-        desc = input("Descrição: ")
-        valor = input("Valor: ")
-        data = input("Data (DD/MM/AAAA): ")
-        tipo = input("Tipo (Receita ou Despesa): ")
-        novo_id = str(uuid.uuid4())[:6]
+@app.get("/lancamentos", response_model=List[Lancamento])
+def listar_lancamentos():
+    lancamentos = carregar_lancamentos()
+    return [despesa_to_dict(l) for l in lancamentos]
 
-        data_convertida = datetime.strptime(data, "%d/%m/%Y").date()
-        tipo_enum = TipoDespesa[tipo.capitalize()]
+@app.post("/lancamentos", response_model=Lancamento, status_code=201)
+def adicionar_lancamento(lanc: LancamentoCreate):
+    novo_id = str(uuid.uuid4())[:6]
+    tipo_enum = TipoDespesa[lanc.tipo.capitalize()]
+    novo = Despesa(lanc.descricao, lanc.valor, lanc.data, tipo_enum, id=novo_id)
+    lancamentos.append(novo)
+    salvar_lancamentos(lancamentos)
+    return despesa_to_dict(novo)
 
-        novo = Despesa(desc, valor, data_convertida, tipo_enum, id=novo_id)
-        lancamentos.append(novo)
-        salvar_lancamentos(lancamentos)
-        print("✔️ Lançamento adicionado com sucesso!")
+@app.get("/lancamentos/{id}", response_model=Lancamento)
+def obter_lancamento(id: str):
+    lanc = next((l for l in lancamentos if l.id == id), None)
+    if not lanc:
+        raise HTTPException(status_code=404, detail="Lançamento não encontrado")
+    return despesa_to_dict(lanc)
 
-    elif opcao == "2":
-        listar_todos(lancamentos)
+@app.put("/lancamentos/{id}", response_model=Lancamento)
+def editar_lancamento(id: str, dados: LancamentoCreate):
+    lanc = next((l for l in lancamentos if l.id == id), None)
+    if not lanc:
+        raise HTTPException(status_code=404, detail="Lançamento não encontrado")
+    lanc.descricao = dados.descricao
+    lanc.valor = dados.valor
+    lanc.data = dados.data
+    lanc.tipo = TipoDespesa[dados.tipo.capitalize()]
+    salvar_lancamentos(lancamentos)
+    return despesa_to_dict(lanc)
 
-    elif opcao == "3":
-        tipo = input("Filtrar por tipo (Receita ou Despesa): ")
-        filtrados = filtrar_por_tipo(lancamentos, tipo)
-        listar_todos(filtrados)
+@app.delete("/lancamentos/{id}")
+def excluir_lancamento(id: str):
+    global lancamentos
+    lanc = next((l for l in lancamentos if l.id == id), None)
+    if not lanc:
+        raise HTTPException(status_code=404, detail="Lançamento não encontrado")
+    lancamentos = [l for l in lancamentos if l.id != id]
+    salvar_lancamentos(lancamentos)
+    return {"detail": "Lançamento excluído com sucesso"}
 
-    elif opcao == "4":
-        data = input("Filtrar por data (DD/MM/AAAA): ")
-        filtrados = filtrar_por_data(lancamentos, data)
-        listar_todos(filtrados)
-
-    elif opcao == "5":
-        totais = calcular_totais(lancamentos)
-        print(f"\n💰 Total de receitas: R${totais['total_receitas']:.2f}")
-        print(f"💸 Total de despesas: R${totais['total_despesas']:.2f}")
-        print(f"📊 Saldo final:       R${totais['saldo']:.2f}")
-
-    elif opcao == "6":
-        id_edit = input("Digite o ID (ou os 6 primeiros caracteres) do lançamento que deseja editar: ").strip()
-
-        lancamento = next((l for l in lancamentos if l.id.startswith(id_edit)), None)
-        if not lancamento:
-            print("❌ Lançamento não encontrado.")
-            continue
-
-        print(f"Editando: {lancamento}")
-        nova_desc = input(f"Nova descrição ({lancamento.descricao}): ") or lancamento.descricao
-        novo_valor = input(f"Novo valor ({lancamento.valor}): ") or lancamento.valor
-        nova_data = input(f"Nova data ({lancamento.data.strftime('%d/%m/%Y')}): ") or lancamento.data.strftime('%d/%m/%Y')
-        novo_tipo = input(f"Novo tipo ({lancamento.tipo.value}): ") or lancamento.tipo.value
-
-        from models.TipoDespesa import TipoDespesa
-        novos_dados = {
-            "descricao": nova_desc,
-            "valor": novo_valor,
-            "data": datetime.strptime(nova_data, "%d/%m/%Y").date(),
-            "tipo": TipoDespesa(novo_tipo)
-        }
-
-        lancamento.descricao = novos_dados["descricao"]
-        lancamento.valor = float(novos_dados["valor"])
-        lancamento.data = novos_dados["data"]
-        lancamento.tipo = novos_dados["tipo"]
-
-        salvar_lancamentos(lancamentos)
-        print("✅ Lançamento editado com sucesso.")
-    
-    elif opcao == "7":
-        id_excluir = input("Digite o ID (ou os 6 primeiros caracteres) do lançamento que deseja excluir: ").strip()
-        lancamento = next((l for l in lancamentos if l.id.startswith(id_excluir)), None)
-
-        if not lancamento:
-            print("❌ Lançamento não encontrado.")
-            continue
-
-        print(f"Deseja excluir: {lancamento}")
-        confirmar = input("Digite S para confirmar: ").strip().lower()
-        if confirmar == "s":
-            lancamentos = [l for l in lancamentos if l.id != lancamento.id]
-            salvar_lancamentos(lancamentos)
-            print("🗑️ Lançamento excluído com sucesso.")
-        else:
-            print("❌ Exclusão cancelada.")
-    
-    elif opcao == "8":
-        break
-
-    else:
-        print("Opção inválida.")
+@app.get("/")
+def raiz():
+    return RedirectResponse(url="/docs")
