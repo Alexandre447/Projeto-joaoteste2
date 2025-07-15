@@ -85,6 +85,14 @@ def excluir_lancamento(id: str):
     salvar_lancamentos(lancamentos)
     return {"detail": "Lançamento excluído com sucesso"}
 
+@app.get("/orcamento")
+def calcular_orcamento():
+    lancamentos = carregar_lancamentos()
+    total = sum(
+        l.valor if l.tipo.value == "Receita" else -l.valor for l in lancamentos
+    )
+    return {"saldo": round(total, 2)}
+
 @app.get("/")
 def raiz():
     return RedirectResponse(url="/docs")
