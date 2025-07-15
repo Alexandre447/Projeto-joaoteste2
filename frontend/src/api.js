@@ -20,3 +20,17 @@ export async function excluirLancamento(id) {
   });
   return await res.json();
 }
+
+export async function obterOrcamento() {
+  const res = await fetch(`${API_URL}/orcamento`);
+  return await res.json();
+}
+
+export async function editarLancamento(id, dados) {
+  const res = await fetch(`${API_URL}/lancamentos/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  });
+  return await res.json();
+}
