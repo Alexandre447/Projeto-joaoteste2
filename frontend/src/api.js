@@ -27,10 +27,17 @@ export async function obterOrcamento() {
 }
 
 export async function editarLancamento(id, dados) {
-  const res = await fetch(`${API_URL}/lancamentos/${id}`, {
+  const response = await fetch(`http://localhost:8000/lancamentos/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(dados),
   });
-  return await res.json();
+
+  if (!response.ok) {
+    throw new Error('Erro ao editar lançamento');
+  }
+
+  return await response.json();
 }

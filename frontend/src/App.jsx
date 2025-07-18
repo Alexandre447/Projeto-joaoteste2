@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { listarLancamentos, excluirLancamento } from './api';
+import { listarLancamentos, excluirLancamento, editarLancamento } from './api';
 import { obterOrcamento } from './api';
 import LancamentoForm from './components/LancamentoForm';
 import LancamentoList from './components/LancamentoList';
@@ -8,6 +8,35 @@ function App() {
   const [lancamentos, setLancamentos] = useState([]);
   const [saldo, setSaldo] = useState(0);
   const [lancamentoEditando, setLancamentoEditando] = useState(null);
+  const [filtroTipo, setFiltroTipo] = useState('');
+  const [dataInicial, setDataInicial] = useState('');
+  const [dataFinal, setDataFinal] = useState('');
+  const [lancamentosFiltrados, setLancamentosFiltrados] = useState([]);
+
+   function aplicarFiltro() {
+    let filtrados = [...lancamentos];
+
+    if (filtroTipo) {
+      filtrados = filtrados.filter(l => l.tipo === filtroTipo);
+    }
+
+    if (dataInicial) {
+      filtrados = filtrados.filter(l => new Date(l.data) >= new Date(dataInicial));
+    }
+
+    if (dataFinal) {
+      filtrados = filtrados.filter(l => new Date(l.data) <= new Date(dataFinal));
+    }
+
+    setLancamentosFiltrados(filtrados);
+  }
+
+  function limparFiltro() {
+    setFiltroTipo('');
+    setDataInicial('');
+    setDataFinal('');
+    setLancamentosFiltrados(lancamentos);
+  }
 
   const carregarSaldo = async () => {
     const data = await obterOrcamento();
@@ -18,10 +47,12 @@ function App() {
     async function fetchData() {
       const dados = await listarLancamentos();
       setLancamentos(dados);
+      setLancamentosFiltrados(dados);
     }
     fetchData();
     carregarSaldo();
   }, []);
+
 
   useEffect(() => {
     async function carregarSaldo() {
@@ -65,8 +96,33 @@ function App() {
         onEdit={handleEdit}
         onCancelEdit={cancelarEdicao}
       />
+
+      <div className="filtros">
+      <label>
+        Tipo:
+        <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
+          <option value="">Todos</option>
+          <option value="Receita">Receita</option>
+          <option value="Despesa">Despesa</option>
+        </select>
+      </label>
+
+      <label>
+        Data Inicial:
+        <input type="date" value={dataInicial} onChange={(e) => setDataInicial(e.target.value)} />
+      </label>
+
+      <label>
+        Data Final:
+        <input type="date" value={dataFinal} onChange={(e) => setDataFinal(e.target.value)} />
+      </label>
+
+      <button onClick={aplicarFiltro}>Filtrar</button>
+      <button onClick={limparFiltro}>Limpar</button>
+    </div>
+
       <LancamentoList
-        lancamentos={lancamentos}
+        lancamentos={lancamentosFiltrados}
         onDelete={handleDelete}
         onEdit={(lancamento) => setLancamentoEditando(lancamento)}
       />
