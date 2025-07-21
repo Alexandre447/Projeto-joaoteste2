@@ -1,98 +1,104 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Optional
-from datetime import date, datetime
+from typing import List
+from datetime import date
 import uuid
-from fastapi.responses import RedirectResponse
 
-from models.despesa import Despesa
-from models.TipoDespesa import TipoDespesa
-from services.persistencia import carregar_lancamentos, salvar_lancamentos
+from sqlalchemy.orm import Session
+from database import SessionLocal, engine, Base
+from models.despesa import Despesa, TipoDespesaEnum
 
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # frontend React
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Carrega lançamentos na inicialização
-lancamentos: List[Despesa] = carregar_lancamentos()
 
-# Pydantic model para validação e serialização
+Base.metadata.create_all(bind=engine)
+
+
 class LancamentoCreate(BaseModel):
     descricao: str
     valor: float
     data: date
-    tipo: str = Field(..., pattern="^(Receita|Despesa)$")
+    tipo: TipoDespesaEnum
 
 class Lancamento(LancamentoCreate):
     id: str
 
-# Helper para converter Despesa para dict serializável
-def despesa_to_dict(desp: Despesa) -> dict:
-    return {
-        "id": desp.id,
-        "descricao": desp.descricao,
-        "valor": float(desp.valor),
-        "data": desp.data,
-        "tipo": desp.tipo.value
-    }
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @app.get("/lancamentos", response_model=List[Lancamento])
-def listar_lancamentos():
-    lancamentos = carregar_lancamentos()
-    return [despesa_to_dict(l) for l in lancamentos]
+def listar_lancamentos(db: Session = Depends(get_db)):
+    lancamentos = db.query(Despesa).all()
+    return lancamentos
 
 @app.post("/lancamentos", response_model=Lancamento, status_code=201)
-def adicionar_lancamento(lanc: LancamentoCreate):
+def adicionar_lancamento(lanc: LancamentoCreate, db: Session = Depends(get_db)):
     novo_id = str(uuid.uuid4())[:6]
-    tipo_enum = TipoDespesa[lanc.tipo.capitalize()]
-    novo = Despesa(lanc.descricao, lanc.valor, lanc.data, tipo_enum, id=novo_id)
-    lancamentos.append(novo)
-    salvar_lancamentos(lancamentos)
-    return despesa_to_dict(novo)
+    novo = Despesa(
+        id=novo_id,
+        descricao=lanc.descricao,
+        valor=lanc.valor,
+        data=lanc.data,
+        tipo=lanc.tipo,
+    )
+    db.add(novo)
+    db.commit()     
+    db.refresh(novo)
+    return novo
 
 @app.get("/lancamentos/{id}", response_model=Lancamento)
-def obter_lancamento(id: str):
-    lanc = next((l for l in lancamentos if l.id == id), None)
+def obter_lancamento(id: str, db: Session = Depends(get_db)):
+    lanc = db.query(Despesa).filter(Despesa.id == id).first()
     if not lanc:
         raise HTTPException(status_code=404, detail="Lançamento não encontrado")
-    return despesa_to_dict(lanc)
+    return lanc
 
 @app.put("/lancamentos/{id}", response_model=Lancamento)
-def editar_lancamento(id: str, dados: LancamentoCreate):
-    lanc = next((l for l in lancamentos if l.id == id), None)
+def editar_lancamento(id: str, dados: LancamentoCreate, db: Session = Depends(get_db)):
+    lanc = db.query(Despesa).filter(Despesa.id == id).first()
     if not lanc:
         raise HTTPException(status_code=404, detail="Lançamento não encontrado")
+
     lanc.descricao = dados.descricao
     lanc.valor = dados.valor
     lanc.data = dados.data
-    lanc.tipo = TipoDespesa[dados.tipo.capitalize()]
-    salvar_lancamentos(lancamentos)
-    return despesa_to_dict(lanc)
+    lanc.tipo = dados.tipo
+    db.commit()
+    db.refresh(lanc)
+    return lanc
 
 @app.delete("/lancamentos/{id}")
-def excluir_lancamento(id: str):
-    global lancamentos
-    lanc = next((l for l in lancamentos if l.id == id), None)
+def excluir_lancamento(id: str, db: Session = Depends(get_db)):
+    lanc = db.query(Despesa).filter(Despesa.id == id).first()
     if not lanc:
         raise HTTPException(status_code=404, detail="Lançamento não encontrado")
-    lancamentos = [l for l in lancamentos if l.id != id]
-    salvar_lancamentos(lancamentos)
+    db.delete(lanc)
+    db.commit()
     return {"detail": "Lançamento excluído com sucesso"}
 
 @app.get("/orcamento")
-def calcular_orcamento():
-    lancamentos = carregar_lancamentos()
+def calcular_orcamento(db: Session = Depends(get_db)):
+    lancamentos = db.query(Despesa).all()
     total = sum(
-        l.valor if l.tipo.value == "Receita" else -l.valor for l in lancamentos
+        l.valor if l.tipo == TipoDespesaEnum.Receita else -l.valor for l in lancamentos
     )
     return {"saldo": round(total, 2)}
 
 @app.get("/")
 def raiz():
+    from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/docs")

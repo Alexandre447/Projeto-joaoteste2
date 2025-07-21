@@ -13,6 +13,12 @@ function App() {
   const [dataFinal, setDataFinal] = useState('');
   const [lancamentosFiltrados, setLancamentosFiltrados] = useState([]);
 
+  async function carregarLancamentos() {
+  const dados = await listarLancamentos();
+  setLancamentos(dados);
+  setLancamentosFiltrados(dados);
+}
+
    function aplicarFiltro() {
     let filtrados = [...lancamentos];
 
@@ -44,12 +50,7 @@ function App() {
   };
 
   useEffect(() => {
-    async function fetchData() {
-      const dados = await listarLancamentos();
-      setLancamentos(dados);
-      setLancamentosFiltrados(dados);
-    }
-    fetchData();
+    carregarLancamentos();
     carregarSaldo();
   }, []);
 
@@ -64,21 +65,20 @@ function App() {
 
 
   async function handleAdd(novo) {
-    setLancamentos([...lancamentos, novo]);
+    await adicionarLancamento(novo);
+    await carregarLancamentos();
     await carregarSaldo();
   }
 
   async function handleDelete(id) {
     await excluirLancamento(id);
-    setLancamentos(lancamentos.filter((l) => l.id !== id));
-    await carregarSaldo();
+    await carregarLancamentos();
+    await carregarSaldo();  
   }
   async function handleEdit(id, dadosAtualizados) {
-    const atualizado = await editarLancamento(id, dadosAtualizados);
-    setLancamentos((prev) =>
-      prev.map((l) => (l.id === id ? atualizado : l))
-    );
+    await editarLancamento(id, dadosAtualizados);
     setLancamentoEditando(null);
+    await carregarLancamentos();
     await carregarSaldo();
   }
 

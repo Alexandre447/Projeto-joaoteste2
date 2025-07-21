@@ -5,13 +5,16 @@ export async function listarLancamentos() {
   return await res.json();
 }
 
-export async function adicionarLancamento(dado) {
-  const res = await fetch(`${API_URL}/lancamentos`, {
+export async function adicionarLancamento(novo) {
+  const response = await fetch('http://localhost:8000/lancamentos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(dado),
+    body: JSON.stringify(novo),
   });
-  return await res.json();
+  if (!response.ok) {
+    throw new Error('Erro ao adicionar lançamento');
+  }
+  return response.json();
 }
 
 export async function excluirLancamento(id) {
