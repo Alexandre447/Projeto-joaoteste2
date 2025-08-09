@@ -50,24 +50,27 @@ function App() {
   };
 
   useEffect(() => {
-    carregarLancamentos();
-    carregarSaldo();
-  }, []);
-
-
-  useEffect(() => {
-    async function carregarSaldo() {
-      const data = await obterOrcamento();
-      setSaldo(data.saldo);
-    }
-    carregarSaldo();
+  async function carregarDados() {
+    const dados = await listarLancamentos();
+    setLancamentos(dados);
+    setLancamentosFiltrados(dados);
+    const saldoAtual = await obterOrcamento();
+    setSaldo(saldoAtual.saldo);
+  }
+  carregarDados();
   }, []);
 
 
   async function handleAdd(novo) {
-    await adicionarLancamento(novo);
-    await carregarLancamentos();
+    try {
+    await adicionarLancamento(novo);    
+    const listaAtualizada = await listarLancamentos(); 
+    setLancamentos(listaAtualizada);
+    setLancamentosFiltrados(listaAtualizada);
     await carregarSaldo();
+  } catch (error) {
+    console.error("Erro ao adicionar:", error);
+  }
   }
 
   async function handleDelete(id) {
@@ -78,7 +81,9 @@ function App() {
   async function handleEdit(id, dadosAtualizados) {
     await editarLancamento(id, dadosAtualizados);
     setLancamentoEditando(null);
-    await carregarLancamentos();
+    const listaAtualizada = await listarLancamentos();
+    setLancamentos(listaAtualizada);
+    setLancamentosFiltrados(listaAtualizada);
     await carregarSaldo();
   }
 

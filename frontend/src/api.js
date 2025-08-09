@@ -1,12 +1,12 @@
-const API_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL;
 
 export async function listarLancamentos() {
   const res = await fetch(`${API_URL}/lancamentos`);
-  return await res.json();
+  return res.json();
 }
 
 export async function adicionarLancamento(novo) {
-  const response = await fetch('http://localhost:8000/lancamentos', {
+  const response = await fetch(`${API_URL}/lancamentos`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(novo),
@@ -30,7 +30,7 @@ export async function obterOrcamento() {
 }
 
 export async function editarLancamento(id, dados) {
-  const response = await fetch(`http://localhost:8000/lancamentos/${id}`, {
+  const response = await fetch(`${API_URL}/lancamentos/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
