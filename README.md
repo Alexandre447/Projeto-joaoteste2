@@ -5,5 +5,6 @@ docker-compose build --no-cache
 and then
 docker compose up
 
-after that open docker desktop and open the URL
+after that open docker desktop run the container
+open the URL:
 [http://localhost:5173/](http://localhost:5173/)
