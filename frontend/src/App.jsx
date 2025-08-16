@@ -49,88 +49,139 @@ function App() {
     setSaldo(data.saldo);
   };
 
-  useEffect(() => {
-  async function carregarDados() {
+  const carregarDados = async () => {
     const dados = await listarLancamentos();
     setLancamentos(dados);
     setLancamentosFiltrados(dados);
     const saldoAtual = await obterOrcamento();
     setSaldo(saldoAtual.saldo);
-  }
-  carregarDados();
+  };
+
+  useEffect(() => {
+    carregarDados();
   }, []);
 
 
-  async function handleAdd(novo) {
+
+  const handleAdd = async (novo) => {
     try {
-    await adicionarLancamento(novo);    
-    const listaAtualizada = await listarLancamentos(); 
-    setLancamentos(listaAtualizada);
-    setLancamentosFiltrados(listaAtualizada);
-    await carregarSaldo();
-  } catch (error) {
-    console.error("Erro ao adicionar:", error);
-  }
-  }
+      const novoLanc = await adicionarLancamento(novo);
 
-  async function handleDelete(id) {
-    await excluirLancamento(id);
-    await carregarLancamentos();
-    await carregarSaldo();  
-  }
-  async function handleEdit(id, dadosAtualizados) {
-    await editarLancamento(id, dadosAtualizados);
-    setLancamentoEditando(null);
-    const listaAtualizada = await listarLancamentos();
-    setLancamentos(listaAtualizada);
-    setLancamentosFiltrados(listaAtualizada);
-    await carregarSaldo();
-  }
+      const lancamentoSeguro = {
+        id: novoLanc.id,
+        descricao: novoLanc.descricao || "",
+        valor: Number(novoLanc.valor) || 0,
+        data: novoLanc.data ? novoLanc.data.slice(0, 10) : "",
+        tipo: novoLanc.tipo || "Despesa",
+      };
 
-  function cancelarEdicao() {
-    setLancamentoEditando(null);
-  }
+      setLancamentos(prev => {
+        const listaAtualizada = [...prev, lancamentoSeguro];
+        let filtrados = [...listaAtualizada];
+        if (filtroTipo) filtrados = filtrados.filter(l => l.tipo === filtroTipo);
+        if (dataInicial) filtrados = filtrados.filter(l => new Date(l.data) >= new Date(dataInicial));
+        if (dataFinal) filtrados = filtrados.filter(l => new Date(l.data) <= new Date(dataFinal));
+        setLancamentosFiltrados(filtrados);
+        return listaAtualizada;
+      });
+
+      const saldoAtual = await obterOrcamento();
+      setSaldo(saldoAtual.saldo);
+    } catch (err) {
+      console.error("Erro ao adicionar:", err);
+    }
+  };
+
+  const handleEdit = async (id, dadosAtualizados) => {
+    try {
+      const atualizado = await editarLancamento(id, dadosAtualizados);
+
+      setLancamentos(prev => {
+        const listaAtualizada = prev.map(l => (l.id === id ? {
+          ...atualizado,
+          valor: Number(atualizado.valor) || 0,
+          data: atualizado.data ? atualizado.data.slice(0, 10) : "",
+        } : l));
+
+        let filtrados = [...listaAtualizada];
+        if (filtroTipo) filtrados = filtrados.filter(l => l.tipo === filtroTipo);
+        if (dataInicial) filtrados = filtrados.filter(l => new Date(l.data) >= new Date(dataInicial));
+        if (dataFinal) filtrados = filtrados.filter(l => new Date(l.data) <= new Date(dataFinal));
+        setLancamentosFiltrados(filtrados);
+        return listaAtualizada;
+      });
+
+      setLancamentoEditando(null);
+      const saldoAtual = await obterOrcamento();
+      setSaldo(saldoAtual.saldo);
+    } catch (err) {
+      console.error("Erro ao editar:", err);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await excluirLancamento(id);
+      setLancamentos(prev => {
+        const listaAtualizada = prev.filter(l => l.id !== id);
+        let filtrados = [...listaAtualizada];
+        if (filtroTipo) filtrados = filtrados.filter(l => l.tipo === filtroTipo);
+        if (dataInicial) filtrados = filtrados.filter(l => new Date(l.data) >= new Date(dataInicial));
+        if (dataFinal) filtrados = filtrados.filter(l => new Date(l.data) <= new Date(dataFinal));
+        setLancamentosFiltrados(filtrados);
+        return listaAtualizada;
+      });
+
+      const saldoAtual = await obterOrcamento();
+      setSaldo(saldoAtual.saldo);
+    } catch (err) {
+      console.error("Erro ao excluir:", err);
+    }
+  };
+
+  const cancelarEdicao = () => setLancamentoEditando(null);
 
   return (
     <div className="container">
       <h1>Controle de Orçamento</h1>
       <LancamentoForm
         onAdd={handleAdd}
-        onAtualizarSaldo={carregarSaldo}
+        onAtualizarSaldo={() => carregarDados()}
         lancamentoEditando={lancamentoEditando}
         onEdit={handleEdit}
         onCancelEdit={cancelarEdicao}
       />
 
       <div className="filtros">
-      <label>
-        Tipo:
-        <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
-          <option value="">Todos</option>
-          <option value="Receita">Receita</option>
-          <option value="Despesa">Despesa</option>
-        </select>
-      </label>
+        <label>
+          Tipo:
+          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
+            <option value="">Todos</option>
+            <option value="Receita">Receita</option>
+            <option value="Despesa">Despesa</option>
+          </select>
+        </label>
 
-      <label>
-        Data Inicial:
-        <input type="date" value={dataInicial} onChange={(e) => setDataInicial(e.target.value)} />
-      </label>
+        <label>
+          Data Inicial:
+          <input type="date" value={dataInicial} onChange={(e) => setDataInicial(e.target.value)} />
+        </label>
 
-      <label>
-        Data Final:
-        <input type="date" value={dataFinal} onChange={(e) => setDataFinal(e.target.value)} />
-      </label>
+        <label>
+          Data Final:
+          <input type="date" value={dataFinal} onChange={(e) => setDataFinal(e.target.value)} />
+        </label>
 
-      <button onClick={aplicarFiltro}>Filtrar</button>
-      <button onClick={limparFiltro}>Limpar</button>
-    </div>
+        <button onClick={aplicarFiltro}>Filtrar</button>
+        <button onClick={limparFiltro}>Limpar</button>
+      </div>
 
       <LancamentoList
         lancamentos={lancamentosFiltrados}
         onDelete={handleDelete}
-        onEdit={(lancamento) => setLancamentoEditando(lancamento)}
+        onEdit={(l) => setLancamentoEditando(l)}
       />
+
       <h2>Orçamento Atual: R$ {saldo.toFixed(2)}</h2>
     </div>
   );

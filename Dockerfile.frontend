@@ -4,6 +4,8 @@ WORKDIR /app
 
 COPY frontend/ /app
 
+COPY frontend/.env.docker /app/.env
+
 RUN npm install
 RUN npm run build
 
